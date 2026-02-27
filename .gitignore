@@ -1,0 +1,23 @@
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ansible
+*.retry
+.ansible/
+
+# Secrets / env (não commitar senhas)
+.env
+*.pem
+*.key
+secrets/
+
+# Logs
+*.log
