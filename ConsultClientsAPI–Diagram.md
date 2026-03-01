@@ -1,10 +1,12 @@
-# ConsultClients API – Network Flow Diagram with Enhanced Flows
+# ConsultClients API – Network Flow Diagram with External and Internal Flow
+# Version: 1.2
 # Owner: Flavio D. Lizzardo
 
 ```mermaid
+
 flowchart LR
 %% ConsultClients API – External + Internal Flow Enhanced
-%% Classes de cores para zonas
+%% Color classes for zones
 classDef internet fill:#cce5ff,stroke:#3399ff,stroke-width:2px;
 classDef firewall fill:#ffcccc,stroke:#ff0000,stroke-width:2px;
 classDef dmz fill:#fff2cc,stroke:#ffaa00,stroke-width:2px;
@@ -60,16 +62,18 @@ subgraph DATA_ZONE["Data Zone"]
     end
 end
 
-%% Monitoring Zone
+%% Monitoring Zone with redundancy
 subgraph MONITORING_ZONE["Monitoring Zone"]
-    H1["19. Monitor VIP\n10.0.0.160:9090/3000"]:::monitoring
-    H2["20. Prometheus\n10.0.0.60:9090"]:::monitoring
-    H3["21. Grafana\n10.0.0.61:3000"]:::monitoring
+    H1["19. Monitor VIP\n10.0.0.160:9090/3000\nActive/Active"]:::monitoring
+    H2["20. Prometheus\n10.0.0.60"]:::monitoring
+    H3["21. Prometheus-2\n10.0.0.61"]:::monitoring
+    H4["22. Grafana\n10.0.0.61"]:::monitoring
+    H5["23. Grafana-2\n10.0.0.62"]:::monitoring
 end
 
 %% Internal Corporate Network
 subgraph INTERNAL_NETWORK["Corporate Internal Network"]
-    I1["22. Internal User"]:::internal
+    I1["24. Internal User"]:::internal
 end
 
 %% External Flow (blue arrows)
@@ -100,12 +104,15 @@ F1 --> F3
 G1 --> G2
 G1 --> G3
 
-%% Monitoring connections
+%% Monitoring connections via VIP
+H1 --> H2
+H1 --> H3
+H1 --> H4
+H1 --> H5
 H2 --> D2
-H2 --> E2
-H2 --> F2
-H2 --> G2
-H3 --> H2
+H3 --> D3
+H4 --> D2
+H5 --> D3
 
 %% Legend
 subgraph LEGEND["Legend"]
