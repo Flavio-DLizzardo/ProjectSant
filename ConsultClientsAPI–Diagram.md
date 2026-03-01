@@ -1,69 +1,95 @@
-# ConsultClients API – Enterprise Architecture Diagram
-# Onwer Flavio D. Lizzardo
+# ConsultClients API – Network Flow Diagram with Firewall Redundancy
+# Owner: Flavio D. Lizzardo
 
 ```mermaid
 flowchart TB
+%% ConsultClients API – Redundancy and Flow
+%% Zones with colors
+classDef internet fill:#cce5ff,stroke:#3399ff,stroke-width:2px;
+classDef firewall fill:#ffcccc,stroke:#ff0000,stroke-width:2px;
+classDef dmz fill:#fff2cc,stroke:#ffaa00,stroke-width:2px;
+classDef app fill:#d5f5e3,stroke:#27ae60,stroke-width:2px;
+classDef data fill:#f5e6ff,stroke:#8e44ad,stroke-width:2px;
+classDef monitoring fill:#ffe6f0,stroke:#ff33a6,stroke-width:2px;
 
+%% Internet Zone
 subgraph INTERNET_ZONE["Internet Zone"]
-    InternetClient["consultclients.company.sant\n200.168.0.20:443\nHTTPS (TLS 1.2/1.3)"]
+    A1["1. External Client\nconsultclients.company.sant\n200.168.0.20:443\nHTTPS"]:::internet
+    subgraph FIREWALL_BORDER["Internet Border Firewalls"]
+        B1["2. FW-Internet-A\n200.168.0.21\nActive/Active VIP 200.168.0.20"]:::firewall
+        B2["3. FW-Internet-B\n200.168.0.22\nActive/Active VIP 200.168.0.20"]:::firewall
+        B1 <--> B2
+    end
 end
 
+%% DMZ Zone
 subgraph DMZ_ZONE["DMZ Zone"]
-    NginxVIP["nginx-vip.dmz\n10.0.0.100:443"]
-    Nginx1["nginx-1.dmz\n10.0.0.10:443"]
-    Nginx2["nginx-2.dmz\n10.0.0.11:443"]
+    C1["4. Nginx VIP\n10.0.0.100:443"]:::dmz
+    C2["5. nginx-1\n10.0.0.10:443"]:::dmz
+    C3["6. nginx-2\n10.0.0.11:443"]:::dmz
 end
 
+%% Application Zone
 subgraph APP_ZONE["Application Zone"]
-    APIVIP["api-vip\n10.0.0.120:8080"]
-    API1["api-1\n10.0.0.20:8080"]
-    API2["api-2\n10.0.0.21:8080"]
+    D1["7. API VIP\n10.0.0.120:8080"]:::app
+    D2["8. api-1\n10.0.0.20:8080"]:::app
+    D3["9. api-2\n10.0.0.21:8080"]:::app
 end
 
+%% Data Zone
 subgraph DATA_ZONE["Data Zone"]
     subgraph REDIS["Redis Cluster"]
-        RedisVIP["redis-vip\n10.0.0.130:6379"]
-        Redis1["redis-1\n10.0.0.30:6379"]
-        Redis2["redis-2\n10.0.0.31:6379"]
+        E1["10. Redis VIP\n10.0.0.130:6379"]:::data
+        E2["11. redis-1\n10.0.0.30:6379"]:::data
+        E3["12. redis-2\n10.0.0.31:6379"]:::data
     end
 
     subgraph KAFKA["Kafka Cluster"]
-        KafkaVIP["kafka-vip\n10.0.0.140:9092"]
-        Kafka1["kafka-1\n10.0.0.40:9092"]
-        Kafka2["kafka-2\n10.0.0.41:9092"]
+        F1["13. Kafka VIP\n10.0.0.140:9092"]:::data
+        F2["14. kafka-1\n10.0.0.40:9092"]:::data
+        F3["15. kafka-2\n10.0.0.41:9092"]:::data
     end
 
     subgraph POSTGRES["PostgreSQL Cluster"]
-        PostgresVIP["postgres-vip\n10.0.0.150:5432"]
-        PostgresPrimary["postgres-primary\n10.0.0.50:5432\nDatabases: db_user, db_clients"]
-        PostgresReplica["postgres-replica\n10.0.0.51:5432\nStreaming Replication"]
+        G1["16. Postgres VIP\n10.0.0.150:5432"]:::data
+        G2["17. postgres-primary\n10.0.0.50:5432\nDatabases: db_user, db_clients"]:::data
+        G3["18. postgres-replica\n10.0.0.51:5432\nStreaming Replication"]:::data
     end
 end
 
+%% Monitoring Zone
 subgraph MONITORING_ZONE["Monitoring Zone"]
-    MonitorVIP["monitor-vip\n10.0.0.160:9090/3000"]
-    Prometheus["prometheus.monitor\n10.0.0.60:9090"]
-    Grafana["grafana.monitor\n10.0.0.61:3000"]
+    H1["19. Monitor VIP\n10.0.0.160:9090/3000"]:::monitoring
+    H2["20. Prometheus\n10.0.0.60:9090"]:::monitoring
+    H3["21. Grafana\n10.0.0.61:3000"]:::monitoring
 end
 
 %% Flow connections
-InternetClient --> NginxVIP
-NginxVIP --> APIVIP
-APIVIP --> RedisVIP
-APIVIP --> KafkaVIP
-APIVIP --> PostgresVIP
+A1 --> B1
+A1 --> B2
 
-RedisVIP --> Redis1
-RedisVIP --> Redis2
+B1 --> C1
+B2 --> C1
 
-KafkaVIP --> Kafka1
-KafkaVIP --> Kafka2
+C1 --> D1
+D1 --> D2
+D1 --> D3
 
-PostgresVIP --> PostgresPrimary
-PostgresVIP --> PostgresReplica
+D1 --> E1
+D1 --> F1
+D1 --> G1
 
-Prometheus --> API1
-Prometheus --> Redis1
-Prometheus --> Kafka1
-Prometheus --> PostgresPrimary
-Grafana --> Prometheus
+E1 --> E2
+E1 --> E3
+
+F1 --> F2
+F1 --> F3
+
+G1 --> G2
+G1 --> G3
+
+H2 --> D2
+H2 --> E2
+H2 --> F2
+H2 --> G2
+H3 --> H2
