@@ -82,18 +82,17 @@ Each zone is protected by firewall policies, VIP abstraction, and strict routing
 
 | Component         | VIP        | Physical Nodes       | IP Addresses       | Port | Middleware                  | Responsibilities |
 |------------------|------------|--------------------|-----------------|------|-----------------------------|-----------------|
-| API Cluster       | 10.0.0.120 | api-1 / api-2       | 10.0.0.20 / 10.0.0.21 | 8080 | Tomcat + JVM + Spring Boot  | REST API processing, RBAC enforcement, caching, messaging, business logic, metrics exposure |
+| API Cluster       | 10.0.0.120 | api-1 / api-2       | 10.0.0.20 / 10.0.0.21 | 8080 | Kafka Client + Spring Boot  | REST API processing, RBAC enforcement, caching, messaging, business logic, metrics exposure |
 
 **Server Details & Middleware Stack per Node:**
 
 - **api-1** (10.0.0.20)  
   - OS: Linux Enterprise  
   - Runtime: OpenJDK 17 LTS (G1GC, heap tuning configured)  
-  - Container: Apache Tomcat 9.x / 10.x  
   - Framework: Spring Boot + Spring Security (RBAC)  
+  - Kafka Client: Apache Kafka producer/consumer  
+  - Redis Client: Lettuce/Jedis for caching  
   - DB Connectivity: PostgreSQL JDBC + HikariCP  
-  - Cache Client: Redis (Lettuce/Jedis)  
-  - Messaging Client: Kafka Java Client  
   - Logging: Logback/Log4j2, structured logging  
   - Metrics: Micrometer endpoint for Prometheus  
 
@@ -191,4 +190,3 @@ The ConsultClients API architecture now ensures:
 - Compliance with LGPD and internal governance  
 
 This infrastructure is fully prepared for **mission-critical production environments** requiring **high availability, horizontal scalability, and secure data handling**.
-
