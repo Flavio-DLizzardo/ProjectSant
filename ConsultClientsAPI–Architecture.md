@@ -1,9 +1,9 @@
 # ConsultClients API – Enterprise Architecture Documentation
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Environment:** Production  
-**Compliance:** Follows the rules of the LGPC (General Personal Data Protection Law) and the company's internal guidelines to ensure that all processes are conducted with integrity
-Onwer: Flavio D. Lizzardo
+**Compliance:** Follows LGPD and internal corporate guidelines to ensure all processes are conducted with integrity  
+**Owner:** Flavio D. Lizzardo
 
 ---
 
@@ -27,65 +27,75 @@ The infrastructure is segmented into five protected zones:
 - Data Zone  
 - Monitoring Zone  
 
-Each zone is protected by firewall policies and strict routing controls.
+**Note:** Firewall redundancy is implemented at the Internet border to ensure high availability and continuity of external access.
+
+
 
 ---
 
-## 2. Internet Zone
+## 2. Internet Zone – Public Access Entry Point
 
-**Public Access Entry Point**
-
-| Logical Endpoint              | Public IP   | Port | Protocol             |
-|--------------------------------|-------------|------|----------------------|
-| consultclients.company.sant    | 200.168.0.20| 443  | HTTPS (TLS 1.2/1.3)  |
+| Logical Endpoint              | Public IP   | Port | Protocol             | Firewall Redundancy          |
+|--------------------------------|-------------|------|----------------------|-----------------------------|
+| consultclients.company.sant    | 200.168.0.20| 443  | HTTPS (TLS 1.2/1.3) | FW-Internet-A / FW-Internet-B Active/Active with VIP |
 
 **Description:**
 
 - This is the only publicly exposed endpoint.  
 - All traffic is encrypted using TLS 1.2/1.3.  
-- No internal services are directly accessible from the Internet.  
+- Firewall redundancy ensures high availability and failover without service disruption.
+- Firewall Redundancy Strategy
+- 
+**Design**
 
-1. **External Client** connects to `consultclients.company.sant` via public IP `200.168.0.20` using HTTPS on port 443.
-2. Traffic is routed through the **DMZ Zone**, reaching the **Nginx VIP** (`10.0.0.100:443`).
-3. Nginx servers terminate TLS/SSL and forward requests via HTTP (`8080`) to the **API VIP** (`10.0.0.120:8080`) in the Application Zone.
-4. The **API servers** process requests and interact with:
+- Each zone boundary (Internet→DMZ, DMZ→Application, Application→Data, Data→Monitoring) is protected by a firewall cluster.
+
+- The cluster consists of two firewalls (Active/Passive or Active/Active).
+
+- A Virtual IP (VIP) abstracts the firewalls, ensuring seamless failover.
+
+- If Firewall-1 fails, Firewall-2 immediately takes over, maintaining uninterrupted traffic flow.
+
+**Firewall Configuration:**
+
+| Device           | Physical IP     | VIP           | Role              |
+|-----------------|----------------|---------------|-----------------|
+| FW-Internet-A    | 200.168.0.21   | 200.168.0.20  | Active/Active VIP |
+| FW-Internet-B    | 200.168.0.22   | 200.168.0.20  | Active/Active VIP |
+
+**Traffic Flow:**
+
+1. External Client connects to `consultclients.company.sant` via VIP `200.168.0.20` using HTTPS on port 443.  
+2. Traffic passes through the **Internet Border Firewall VIP** (Active/Active).  
+3. Traffic is routed to the **DMZ Zone**, reaching the **Nginx VIP** (`10.0.0.100:443`).  
+4. Nginx servers terminate TLS/SSL and forward requests via HTTP (`8080`) to the **API VIP** (`10.0.0.120:8080`) in the Application Zone.  
+5. The **API servers** process requests and interact with:
    - **Redis VIP** (`10.0.0.130:6379`) for caching.
    - **PostgreSQL VIP** (`10.0.0.150:5432`) for persistent storage.
-   - **Kafka VIP** (`10.0.0.140:9092`) for event streaming.
-5. **Prometheus** scrapes metrics from APIs, Redis, PostgreSQL, and Kafka.
-6. **Grafana** connects to Prometheus via the Monitoring VIP (`10.0.0.160`) to visualize dashboards.
-
-- **Descriptive:** Entry point for users who access the application securely and is exposed with TLS1.2 and 1.3 level certificates throughout the cycle and follows the same policy internally.
+   - **Kafka VIP** (`10.0.0.140:9092`) for event streaming.  
+6. **Prometheus** scrapes metrics; **Grafana** visualizes dashboards via Monitoring VIP (`10.0.0.160`).
 
 ---
 
-## Internal Access Flow (Intranet)
+## 3. Internal Access Flow (Intranet)
 
-1. **Internal users** bypass the public IP and connect directly to the **API VIP** (`10.0.0.120:8080`).
-2. Requests are processed by API servers without traversing the DMZ.
-3. APIs interact with the same Redis, PostgreSQL, and Kafka clusters via their VIPs.
-4. Monitoring remains identical, with Prometheus collecting metrics and Grafana providing visualization.
-
-**Describe:** Internal access is faster and restricted to the corporate network, reducing exposure to external threats.
+1. Internal users bypass the public IP and connect directly to **API VIP** (`10.0.0.120:8080`).  
+2. Requests are processed by API servers without traversing the DMZ.  
+3. APIs interact with Redis, PostgreSQL, and Kafka via their VIPs.  
+4. Monitoring remains identical, with Prometheus collecting metrics and Grafana providing visualization.  
 
 **Traffic Flow:**  
-External Client → Firewall → DMZ (Nginx VIP)
+Internal Client → API VIP → Data VIPs  
+
+**Note:** Firewall redundancy is not required for internal traffic.
 
 ---
 
-## 3. DMZ Zone – Nginx Reverse Proxy Cluster
-
-**Cluster Overview (VIP + Physical Nodes)**
+## 4. DMZ Zone – Nginx Reverse Proxy Cluster
 
 | Component      | VIP        | Physical Nodes       | Port | Middleware        |
-|----------------|------------|----------------------|------|-------------------|
-| Nginx Cluster  | 10.0.0.100 | 10.0.0.10 / 10.0.0.11| 443  | Nginx + OpenSSL   |
-
-**Logical Mapping:**
-
-- nginx-vip.dmz → 10.0.0.100  
-- nginx-1.dmz → 10.0.0.10  
-- nginx-2.dmz → 10.0.0.11  
+|----------------|------------|--------------------|------|-----------------|
+| Nginx Cluster  | 10.0.0.100 | 10.0.0.10 / 10.0.0.11 | 443 | Nginx + OpenSSL |
 
 **Responsibilities:**
 
@@ -101,187 +111,79 @@ External Client → Firewall → DMZ (Nginx VIP)
 
 ---
 
-## 4. Application Zone – Tomcat API Cluster
-
-**Cluster Overview (VIP + Physical Nodes)**
+## 5. Application Zone – Tomcat API Cluster
 
 | Component     | VIP        | Physical Nodes       | Port | Middleware                  |
-|---------------|------------|----------------------|------|-----------------------------|
-| API Cluster   | 10.0.0.120 | 10.0.0.20 / 10.0.0.21| 8080 | Tomcat + JVM + Spring Boot  |
+|---------------|------------|--------------------|------|-----------------------------|
+| API Cluster   | 10.0.0.120 | 10.0.0.20 / 10.0.0.21 | 8080 | Tomcat + JVM + Spring Boot |
 
-**Logical Mapping:**
+**Middleware Stack per Node:**
 
-- api-vip → 10.0.0.120  
-- api-1 → 10.0.0.20  
-- api-2 → 10.0.0.21  
+- Linux Enterprise OS  
+- OpenJDK 17 LTS  
+- Apache Tomcat 9.x / 10.x  
+- Spring Boot + Spring Security (RBAC)  
+- PostgreSQL JDBC + HikariCP  
+- Redis (Lettuce/Jedis)  
+- Kafka Java Client  
+- Logback / Log4j2  
+- Micrometer + Prometheus endpoint  
 
-**Middleware Stack per API Node:**
-
-- **OS:** Linux Enterprise  
-- **Runtime:** OpenJDK 17 LTS (G1GC enabled, heap tuning configured)  
-- **Container:** Apache Tomcat 9.x / 10.x  
-- **Framework:** Spring Boot + Spring Security (RBAC)  
-- **Database Connectivity:** PostgreSQL JDBC Driver + HikariCP pool  
-- **Cache Client:** Redis (Lettuce/Jedis)  
-- **Messaging Client:** Kafka Java Client  
-- **Logging:** Logback/Log4j2 with structured logging  
-- **Metrics:** Micrometer + Prometheus endpoint  
-
-**Functional Responsibilities:**
-
-- REST API processing  
-- Authentication via `db_user`  
-- Business operations via `db_clients`  
-- Redis caching  
-- Kafka event publishing  
-- Metrics exposure  
-
-**Architecture:** Fully stateless to allow horizontal scaling.
+**Architecture:** Fully stateless for horizontal scaling.
 
 ---
 
-## 5. Data Zone
+## 6. Data Zone
 
-### 5.1 Redis Cluster
+### 6.1 Redis Cluster
 
 | Component      | VIP        | Physical Nodes       | Port | Middleware |
-|----------------|------------|----------------------|------|------------|
-| Redis Cluster  | 10.0.0.130 | 10.0.0.30 / 10.0.0.31| 6379 | Redis 6+   |
+|----------------|------------|--------------------|------|------------|
+| Redis Cluster  | 10.0.0.130 | 10.0.0.30 / 10.0.0.31 | 6379 | Redis 6+ |
 
-**Logical Mapping:**
-
-- redis-vip → 10.0.0.130  
-- redis-1→ 10.0.0.30  
-- redis-2 → 10.0.0.31  
-
-**Purpose:**  
-- Read cache  
-- Token/session caching  
-- Performance optimization  
-- Replication enabled  
-
----
-
-### 5.2 Kafka Cluster
+### 6.2 Kafka Cluster
 
 | Component      | VIP        | Physical Nodes       | Port | Middleware        |
-|----------------|------------|----------------------|------|-------------------|
-| Kafka Cluster  | 10.0.0.140 | 10.0.0.40 / 10.0.0.41| 9092 | Apache Kafka 3.x  |
+|----------------|------------|--------------------|------|-----------------|
+| Kafka Cluster  | 10.0.0.140 | 10.0.0.40 / 10.0.0.41 | 9092 | Apache Kafka 3.x |
 
-**Logical Mapping:**
-
-- kafka-vip → 10.0.0.140  
-- kafka-1 → 10.0.0.40  
-- kafka-2 → 10.0.0.41  
-
-**Purpose:**  
-- Event streaming  
-- Asynchronous integration  
-- Message durability  
-- Replication factor ≥ 2  
-
----
-
-### 5.3 PostgreSQL Cluster
+### 6.3 PostgreSQL Cluster
 
 | Component          | VIP        | Physical Nodes       | Port | Middleware       |
-|--------------------|------------|----------------------|------|------------------|
-| PostgreSQL Cluster | 10.0.0.150 | 10.0.0.50 / 10.0.0.51| 5432 | PostgreSQL 14+   |
+|--------------------|------------|--------------------|------|-----------------|
+| PostgreSQL Cluster | 10.0.0.150 | 10.0.0.50 / 10.0.0.51 | 5432 | PostgreSQL 14+ |
 
-**Logical Mapping:**
-
-- postgres-vip → 10.0.0.150  
-- postgres-primary → 10.0.0.50  
-- postgres-replica → 10.0.0.51  
-
-**Logical Databases:**
-
-- **db_user**  
-  - Authentication credentials  
-  - Role mapping  
-  - Permission mapping  
-  - Audit logs  
-
-- **db_clients**  
-  - Client records  
-  - Business transactions  
-  - Operational data  
-
-**Replication:** Streaming replication enabled.
+**Replication:** Streaming replication enabled for high availability.
 
 ---
 
-## 6. Monitoring Zone
-
-**Cluster Overview (VIP + Nodes)**
+## 7. Monitoring Zone
 
 | Component   | VIP        | Physical Nodes       | Port       | Middleware            |
-|-------------|------------|----------------------|------------|-----------------------|
-| Monitoring  | 10.0.0.160 | 10.0.0.60 / 10.0.0.61| 9090 / 3000| Prometheus + Grafana  |
-
-**Logical Mapping:**
-
-- prometheus.monitor → 10.0.0.60  
-- grafana.monitor → 10.0.0.61  
-- monitor-vip → 10.0.0.160  
-
-**Purpose:**
-
-- Metrics collection  
-- Health checks  
-- Alerting  
-- Performance dashboards  
-
-**Prometheus scrapes:**
-
-- API metrics endpoint  
-- Redis exporter  
-- PostgreSQL exporter  
-- Kafka exporter  
+|-------------|------------|--------------------|------------|---------------------|
+| Monitoring  | 10.0.0.160 | 10.0.0.60 / 10.0.0.61 | 9090 / 3000 | Prometheus + Grafana |
 
 ---
 
-## 7. External vs Internal Access Model
+## 8. High Availability & Firewall Strategy
 
-**External Flow:**
+- **Internet Border Firewall:** Active/Active with VIP `200.168.0.20`.  
+- VIP abstraction for all clusters (API, DMZ, Data, Monitoring).  
+- Redundant nodes in every zone.  
+- No single point of failure.  
+- Database, Redis, Kafka replication.  
+- Monitoring for proactive failure detection.
 
-Internet (200.168.0.20)  
-→ Firewall  
-→ nginx-vip (10.0.0.100)  
-→ api-vip (10.0.0.120)  
-→ Data VIPs  
-
-**Internal Flow:**
-
-Corporate Network  
-→ api-vip (10.0.0.120)  
-→ Data VIPs  
-
-Internal access bypasses DMZ but maintains authentication and RBAC enforcement.
-
----
-
-## 8. High Availability Strategy
-
-- VIP abstraction for all clusters  
-- Redundant nodes in every zone  
-- No single point of failure  
-- Database replication  
-- Kafka broker replication  
-- Redis replication  
-- Monitoring for proactive failure detection  
-
-**Targets:** RTO (Recovery Time Objective)
-
+**Targets:**  
 - RTO < 30 minutes  
-- RPO < 5 minutes  
+- RPO < 5 minutes
 
 ---
 
 ## 9. Security Strategy
 
 - TLS 1.2 / 1.3 encryption externally  
-- Firewall segmentation between zones  
+- **Firewall redundancy at Internet border only**  
 - Internal-only exposure for Data Zone  
 - RBAC enforced at API layer  
 - LGPD-aligned data handling  
@@ -293,6 +195,7 @@ Internal access bypasses DMZ but maintains authentication and RBAC enforcement.
 
 The ConsultClients architecture provides:
 
+- Internet border firewall redundancy with VIP `200.168.0.20`  
 - Clear VIP-to-physical-node mapping  
 - Multi-layer high availability  
 - Secure segmentation across five zones  
@@ -300,4 +203,4 @@ The ConsultClients architecture provides:
 - Observability and operational transparency  
 - Compliance with LGPD and internal governance  
 
-This infrastructure is fully prepared for mission-critical production environments requiring **high reliability, scalability, and secure data handling**.
+Fully prepared for mission-critical production environments requiring **high reliability, scalability, and secure data handling**.
