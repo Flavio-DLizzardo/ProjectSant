@@ -1,0 +1,119 @@
+---
+# Day 2 operations playbook for PostgreSQL project API local
+# - Manages PostgreSQL service via systemd
+# - Admin credentials (user "admin") are secured via vault.yml
+# - Inventory hosts defined in inventory.yml
+# - Onwer : Flavio D. Lizzardo
+
+
+- name: Day 2 Operations - PostgreSQL Cluster
+  hosts: postgres
+  become: yes
+  vars_files:
+    - vault.yml
+  vars:
+    pg_primary: "10.0.0.50"
+    pg_replica: "10.0.0.51"
+    pg_databases:
+      - db_user
+      - db_clients
+    backup_dir: /var/backups/postgresql
+    pg_service_name: postgresql
+
+  tasks:
+
+    # Step1️ - Check/Start PostgreSQL service
+    - name: Gather service facts
+      service_facts:
+
+    - name: Show current PostgreSQL service state
+      debug:
+        msg: "PostgreSQL service current state: {{ ansible_facts.services[pg_service_name + '.service'].state }}"
+
+    - name: Start PostgreSQL service if it is stopped
+      service:
+        name: "{{ pg_service_name }}"
+        state: started
+      register: pg_service_action
+      when: ansible_facts.services[pg_service_name + '.service'].state != "running"
+
+    - name: Show action taken on PostgreSQL service
+      debug:
+        msg: >
+          {% if pg_service_action.changed %}
+            PostgreSQL service was stopped and has been started.
+          {% else %}
+            PostgreSQL service was already running.
+          {% endif %}
+
+    # Step 2️ - Ensure backup directory exists
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+
+    # Stpep 3️ - Backup all databases
+    - name: Backup databases
+      postgresql_db:
+        name: "{{ item }}"
+        target: "{{ backup_dir }}/{{ item }}_{{ ansible_date_time.iso8601 }}.sql"
+        state: dump
+        login_user: postgres
+      loop: "{{ pg_databases }}"
+      delegate_to: "{{ pg_primary }}"
+
+    # Step 4️ - Remove backups older than 2 days
+    - name: Remove backups older than 2 days
+      shell: "find {{ backup_dir }} -type f -name '*.sql' -mtime +2 -delete"
+      delegate_to: "{{ pg_primary }}"
+
+    # Step 5️ - Update admin user password
+    - name: Ensure admin password is set
+      postgresql_user:
+        name: "{{ pg_admin_user }}"
+        password: "{{ pg_admin_password }}"
+        login_user: postgres
+        state: present
+      delegate_to: "{{ pg_primary }}"
+
+    # Step 6️ - Check replication status
+    - name: Check replication status on primary
+      shell: |
+        psql -U postgres -c "SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
+      register: repl_status
+      delegate_to: "{{ pg_primary }}"
+
+    - name: Show replication status
+      debug:
+        var: repl_status.stdout_lines
+
+    # Step 7️- Interactive restore (“yes/no”) for each database
+    - name: Restore databases interactively
+      block:
+        - name: Identify the latest backup for {{ item }}
+          shell: "ls -t {{ backup_dir }}/{{ item }}_*.sql | head -n 1"
+          register: latest_backup
+          delegate_to: "{{ pg_primary }}"
+
+        - name: Show latest backup file
+          debug:
+            msg: "Latest backup for {{ item }} found: {{ latest_backup.stdout }}"
+
+        - name: Ask if restore is needed
+          pause:
+            prompt: "Do you want to restore the latest backup for {{ item }}? (yes/no)"
+          register: restore_answer
+
+        - name: Perform restore if user answered yes
+          postgresql_db:
+            name: "{{ item }}"
+            target: "{{ latest_backup.stdout }}"
+            state: restore
+            login_user: postgres
+          delegate_to: "{{ pg_primary }}"
+          when: restore_answer.user_input | lower == 'yes'
+
+      loop: "{{ pg_databases }}"
