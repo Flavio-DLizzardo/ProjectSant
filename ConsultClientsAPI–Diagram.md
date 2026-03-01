@@ -1,16 +1,19 @@
-# ConsultClients API – Network Flow Diagram with Firewall Redundancy
+# ConsultClients API – Network Flow Diagram with Enhanced Flows
 # Owner: Flavio D. Lizzardo
 
 ```mermaid
-flowchart TB
-%% ConsultClients API – Redundancy and Flow
-%% Zones with colors
+flowchart LR
+%% ConsultClients API – External + Internal Flow Enhanced
+%% Classes de cores para zonas
 classDef internet fill:#cce5ff,stroke:#3399ff,stroke-width:2px;
 classDef firewall fill:#ffcccc,stroke:#ff0000,stroke-width:2px;
 classDef dmz fill:#fff2cc,stroke:#ffaa00,stroke-width:2px;
 classDef app fill:#d5f5e3,stroke:#27ae60,stroke-width:2px;
 classDef data fill:#f5e6ff,stroke:#8e44ad,stroke-width:2px;
 classDef monitoring fill:#ffe6f0,stroke:#ff33a6,stroke-width:2px;
+classDef internal fill:#d1ecf1,stroke:#17a2b8,stroke-width:2px,stroke-dasharray: 5 5;
+classDef flowExternal stroke:#0056b3,stroke-width:2px;
+classDef flowInternal stroke:#17a2b8,stroke-width:2px,stroke-dasharray: 5 5;
 
 %% Internet Zone
 subgraph INTERNET_ZONE["Internet Zone"]
@@ -64,17 +67,26 @@ subgraph MONITORING_ZONE["Monitoring Zone"]
     H3["21. Grafana\n10.0.0.61:3000"]:::monitoring
 end
 
-%% Flow connections
-A1 --> B1
-A1 --> B2
+%% Internal Corporate Network
+subgraph INTERNAL_NETWORK["Corporate Internal Network"]
+    I1["22. Internal User"]:::internal
+end
 
-B1 --> C1
-B2 --> C1
+%% External Flow (blue arrows)
+A1 -. flowExternal .-> B1
+A1 -. flowExternal .-> B2
+B1 -. flowExternal .-> C1
+B2 -. flowExternal .-> C1
+C1 -. flowExternal .-> D1
 
-C1 --> D1
+%% Internal Flow (cyan dashed arrows)
+I1 -. flowInternal .-> D1
+
+%% API to Nodes
 D1 --> D2
 D1 --> D3
 
+%% API to Data Zone
 D1 --> E1
 D1 --> F1
 D1 --> G1
@@ -88,8 +100,15 @@ F1 --> F3
 G1 --> G2
 G1 --> G3
 
+%% Monitoring connections
 H2 --> D2
 H2 --> E2
 H2 --> F2
 H2 --> G2
 H3 --> H2
+
+%% Legend
+subgraph LEGEND["Legend"]
+    LE1["Blue arrows: External Flow"]:::flowExternal
+    LE2["Cyan dashed arrows: Internal Flow"]:::flowInternal
+end
