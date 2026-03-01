@@ -67,18 +67,3 @@ Prometheus --> Redis1
 Prometheus --> Kafka1
 Prometheus --> PostgresPrimary
 Grafana --> Prometheus
-
----
-
-## Diagram legend
-
-- **Internet Zone:** Single public endpoint (`200.168.0.20:443`) with TLS 1.2/1.3.  
-- **DMZ Zone:** Nginx cluster with VIP (`10.0.0.100:443`) and two nodes.  
-- **Application Zone:** API cluster with VIP (`10.0.0.120:8080`) and two Tomcat servers.  
-- **Data Zone:**  
-  - Redis cluster (`10.0.0.130:6379`) with two nodes.  
-  - Kafka cluster (`10.0.0.140:9092`) with two brokers.  
-  - PostgreSQL cluster (`10.0.0.150:5432`) with **Primary** (`10.0.0.50`) and **Replica** (`10.0.0.51`), hosting **db_user** and **db_clients**.  
-- **Monitoring Zone:** Prometheus (`10.0.0.60:9090`) and Grafana (`10.0.0.61:3000`) behind VIP (`10.0.0.160`).  
-
----
