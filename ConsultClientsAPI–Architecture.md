@@ -29,6 +29,8 @@ The infrastructure is segmented into five protected zones:
 
 **Note:** Firewall redundancy is implemented at the Internet border to ensure high availability and continuity of external access.
 
+
+
 ---
 
 ## 2. Internet Zone – Public Access Entry Point
@@ -41,7 +43,18 @@ The infrastructure is segmented into five protected zones:
 
 - This is the only publicly exposed endpoint.  
 - All traffic is encrypted using TLS 1.2/1.3.  
-- Firewall redundancy ensures high availability and failover without service disruption.  
+- Firewall redundancy ensures high availability and failover without service disruption.
+- Firewall Redundancy Strategy
+- 
+**Design**
+
+- Each zone boundary (Internet→DMZ, DMZ→Application, Application→Data, Data→Monitoring) is protected by a firewall cluster.
+
+- The cluster consists of two firewalls (Active/Passive or Active/Active).
+
+- A Virtual IP (VIP) abstracts the firewalls, ensuring seamless failover.
+
+- If Firewall-1 fails, Firewall-2 immediately takes over, maintaining uninterrupted traffic flow.
 
 **Firewall Configuration:**
 
