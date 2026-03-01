@@ -7,7 +7,7 @@
 
 ---
 
-## 1. Executive Overview
+## 1. Overview
 
 The ConsultClients API is an enterprise-grade application architecture designed to support:
 
